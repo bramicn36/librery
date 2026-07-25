@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Library — Books</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .add-form {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+      box-shadow: var(--shadow);
+    }
+    .add-form h2 { margin-bottom: 1rem; font-size: 1.1rem; }
+    .form-row {
+      display: grid;
+      grid-template-columns: 2fr 1.5fr 1fr auto;
+      gap: 0.75rem;
+      align-items: end;
+    }
+    .form-row label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--muted);
+    }
+    .form-row input,
+    .form-row select {
+      display: block;
+      width: 100%;
+      margin-top: 0.3rem;
+      padding: 0.55rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 0.9rem;
+    }
+    .status-available { color: var(--success); font-weight: 600; }
+    .status-loan { color: var(--warning); font-weight: 600; }
+    @media (max-width: 768px) {
+      .form-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Library Management System</h1>
+    <p class="subtitle">Books catalog</p>
+  </header>
+
+  <main>
+    <div id="toast" class="toast hidden"></div>
+
+    <section class="add-form">
+      <h2>Add New Book</h2>
+      <form id="add-book-form" class="form-row">
+        <label>
+          Title
+          <input type="text" id="title" required maxlength="200" placeholder="Book title">
+        </label>
+        <label>
+          Author
+          <select id="author_id" required></select>
+        </label>
+        <label>
+          Year
+          <input type="number" id="year" required min="1000" max="2100" placeholder="2020">
+        </label>
+        <button type="submit" class="btn primary">Add Book</button>
+      </form>
+    </section>
+
+    <section>
+      <div class="panel-header">
+        <h2>All Books</h2>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Author</th>
+              <th>Year</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="books-table">
+            <tr><td colspan="5" class="empty">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const API = "http://localhost:8000";
+    let authors = [];
+
+    function showToast(message, type = "success") {
+      const el = document.getElementById("toast");
+      el.textContent = message;
+      el.className = `toast ${type}`;
+      setTimeout(() => el.classList.add("hidden"), 3000);
+    }
+
+    function esc(str) {
+      const d = document.createElement("div");
+      d.textContent = str ?? "";
+      return d.innerHTML;
+    }
+
+    function authorName(id) {
+      const a = authors.find((x) => x.id === id);
+      return a ? a.name : `#${id}`;
+    }
+
+    function isAvailable(book) {
+      return book.available === true || book.available === 1;
+    }
+
+    function loadAuthors() {
+      fetch(`${API}/authors`)
+        .then((res) => res.json())
+        .then((data) => {
+          authors = data;
+          const select = document.getElementById("author_id");
+          select.innerHTML = data.length
+            ? data.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join("")
+            : '<option value="" disabled selected>No authors — add authors first</option>';
+        })
+        .catch((err) => showToast(err.message, "error"));
+    }
+
+    function loadBooks() {
+      fetch(`${API}/books`)
+        .then((res) => res.json())
+        .then((data) => {
+          const tbody = document.getElementById("books-table");
+          if (!data.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="empty">No books yet.</td></tr>';
+            return;
+          }
+          tbody.innerHTML = data.map((book) => `
+            <tr>
+              <td><strong>${esc(book.title)}</strong></td>
+              <td>${esc(authorName(book.author_id))}</td>
+              <td>${book.year ?? "—"}</td>
+              <td class="${isAvailable(book) ? "status-available" : "status-loan"}">
+                ${isAvailable(book) ? "Available" : "On Loan"}
+              </td>
+              <td class="actions">
+                <button class="btn sm danger" onclick="deleteBook(${book.id})">Delete</button>
+              </td>
+            </tr>
+          `).join("");
+        })
+        .catch((err) => showToast(err.message, "error"));
+    }
+
+    function deleteBook(id) {
+      if (!confirm("Delete this book?")) return;
+
+      fetch(`${API}/books/${id}`, { method: "DELETE" })
+        .then((res) => {
+          if (!res.ok) throw new Error("Delete failed");
+          showToast("Book deleted");
+          loadBooks();
+        })
+        .catch((err) => showToast(err.message, "error"));
+    }
+
+    document.getElementById("add-book-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+
+      const title = document.getElementById("title").value.trim();
+      const author_id = document.getElementById("author_id").value;
+      const year = document.getElementById("year").value;
+      const params = new URLSearchParams({ title, author_id, year });
+
+      fetch(`${API}/books?${params}`, { method: "POST" })
+        .then((res) => res.json())
+        .then((data) => {
+          showToast(data.message || "Book added");
+          e.target.reset();
+          loadBooks();
+        })
+        .catch((err) => showToast(err.message, "error"));
+    });
+
+    // Load books on page load
+    loadAuthors();
+    loadBooks();
+  </script>
+</body>
+</html>
