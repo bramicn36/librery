@@ -50,13 +50,6 @@ jobs:
 
       - name: Start server and health check
         run: |
-          uvicorn main:app --host 0.0.0.0 --port 8000 > /tmp/app.log 2>&1 &
-          for i in {1..15}; do
-            if curl -sf http://127.0.0.1:8000/health; then
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "Health check failed"
-          cat /tmp/app.log
-          exit 1
+          python -m uvicorn main:app --host 0.0.0.0 --port 8000 > /tmp/app.log 2>&1 &
+          sleep 5
+          curl -sf http://127.0.0.1:8000/health
